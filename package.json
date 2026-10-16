@@ -1,0 +1,106 @@
+{
+  "name": "taiwan-stock-lab",
+  "version": "0.9.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "concurrently \"node --watch server/index.ts --codex\" \"vite --mode codex\"",
+    "start": "node server/index.ts",
+    "start:codex": "node server/index.ts --codex",
+    "check": "tsc --noEmit",
+    "test": "node --test server/*.test.ts desktop/*.test.ts",
+    "build": "tsc --noEmit && vite build",
+    "build:codex": "tsc --noEmit && vite build --mode codex",
+    "desktop:compile": "node desktop/build.ts",
+    "desktop:dev": "npm run build && npm run desktop:compile && electron .",
+    "package:win": "npm run build && node desktop/build.ts --package",
+    "desktop:verify": "node desktop/build.ts --verify"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "jose": "^6.2.12",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "concurrently": "^9.1.2",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  },
+  "description": "Personal Taiwan stock research with local ChatGPT authorization",
+  "author": "Taiwan Stock Lab contributors",
+  "main": ".desktop/main.cjs",
+  "build": {
+    "appId": "tw.taiwanstocklab.desktop",
+    "productName": "Taiwan Stock Lab",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      ".desktop/main.cjs",
+      ".desktop/icon.png",
+      "package.json",
+      "!node_modules/**"
+    ],
+    "extraResources": [
+      {
+        "from": ".desktop",
+        "to": "server",
+        "filter": [
+          "server.cjs",
+          "server.cjs.LEGAL.txt"
+        ]
+      },
+      {
+        "from": "dist",
+        "to": "web"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": ".desktop/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "每日台股研究室",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "TaiwanStockLab-Setup-${version}-${arch}.${ext}",
+      "installerIcon": ".desktop/icon.ico",
+      "uninstallerIcon": ".desktop/icon.ico"
+    },
+    "portable": {
+      "artifactName": "TaiwanStockLab-Portable-${version}-${arch}.${ext}"
+    }
+  }
+}

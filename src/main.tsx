@@ -1,0 +1,34 @@
+import PaperPanel from './PaperPanel';
+import type { PaperAccount } from '../shared/paper';
+import React, { useCallback, useEffect, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import type { Run, Trade, Query, Schedule } from '../shared/model';
+import QueryPanel, { pages, type Page, type AuthStatus } from './QueryPanel';
+import './style.css';
+type State = { paper?: PaperAccount; bars: number; dates: string[]; trades: Trade[]; runs: Run[]; auth?: AuthStatus; schedule?: Schedule; queries?: Query[]; instance?: { role: 'user' | 'codex'; port: number; dataDirectory: string } };
+async function api(path: string, body?: unknown) { const r = await fetch('/api/' + path, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await r.json(); if (!r.ok) throw new Error(data.error || '請求失敗'); return data; }
+function App() {
+  const readPage = (): Page => pages.find(item => '#' + item.id === location.hash)?.id ?? 'overview';
+  const [page, setPage] = useState<Page>(readPage);
+  useEffect(() => { const update = () => setPage(readPage()); window.addEventListener('hashchange', update); return () => window.removeEventListener('hashchange', update); }, []);
+  function navigate(next: Page) { setPage(next); location.hash = next; window.scrollTo({ top: 0 }); }
+  const [state, setState] = useState<State>({ bars: 0, dates: [], trades: [], runs: [] });
+  const [date, setDate] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false);
+  const refresh = useCallback(async () => { const s = await api('state'); setState(s); setDate(d => d || s.dates[0] || ''); }, []);
+  useEffect(() => { void refresh().catch(e => setMessage(e.message)); const onFocus = () => { void refresh().catch(() => {}); }; window.addEventListener('focus', onFocus); const timer = setInterval(() => { void refresh().catch(() => setMessage('本機服務未連線，請確認服務是否開啟')); }, 5000); return () => { clearInterval(timer); window.removeEventListener('focus', onFocus); }; }, [refresh]);
+  async function perform(action: () => Promise<unknown>) { setBusy(true); setMessage('處理中…'); try { await action(); await refresh(); setMessage('已完成並保存'); } catch (e) { setMessage(e instanceof Error ? e.message : '處理失敗'); } finally { setBusy(false); } }
+  const latest = state.runs[0];
+  const heading = <header><span>TAIWAN / DAILY RESEARCH</span><h1>每日台股研究室</h1><p>v0.9.1 · ChatGPT 分析 · 10萬元虛擬交易</p>{state.instance && <p><span className="badge">{state.instance.role === 'codex' ? 'Codex 預覽版本' : '你的專用版本'} · {state.instance.port}</span></p>}</header>;
+  return <main>
+    {state.auth && state.schedule ? <QueryPanel auth={state.auth} schedule={state.schedule} queries={state.queries ?? []} onChanged={refresh} heading={heading} page={page} navigate={navigate}>
+    <div hidden={page !== 'paper'}>{state.paper && <PaperPanel account={state.paper} busy={busy} onToggle={()=>void perform(()=>api('paper/settings',{enabled:!state.paper!.enabled}))}/>}<p role="status">{page==='paper'?message:''}</p></div>
+    <div hidden={page !== 'research'}><aside><strong>12:00 盤中選股尚未啟用</strong><p>上方 AI 查詢會自行上網找行情與技術指標，不需匯入。網路可取得的資料範圍與時間以回覆來源為準；尚未完成全市場 12:00 掃描。下方為選用的本機資料研究與交易紀錄。</p></aside>
+    <div className="stats"><article><small>已匯入日 K</small><h2>{state.bars.toLocaleString()}</h2></article><article><small>研究紀錄</small><h2>{state.runs.length}{state.runs.length === 30 ? '+' : ''}</h2></article><article><small>交易紀錄</small><h2>{state.trades.length}</h2></article></div>
+    <section><h2>本機資料研究（選用）</h2><p>匯入 JSON 陣列，欄位與限制請見 doc/DATA.md。每檔至少 60 筆完整日 K；量的單位統一為股。</p><input disabled={busy} type="file" accept=".json,application/json" onChange={e => { const file = e.target.files?.[0]; if (file) void perform(async () => api('import', JSON.parse(await file.text()))); e.target.value = ''; }} /><select aria-label="研究日期" value={date} onChange={e => setDate(e.target.value)}><option value="">選擇日期</option>{state.dates.map(d => <option key={d}>{d}</option>)}</select><button disabled={busy || !date} onClick={() => void perform(() => api('analyze', { date }))}>執行收盤研究</button><p role="status">{message}</p></section>
+    <section><h2>最新研究結果</h2>{latest ? <><p>{latest.date} · {latest.strategy} · 資料涵蓋 {latest.coverage} 檔，並非全市場掃描</p><div className="cards">{latest.candidates.map(c => <article key={c.code}><h3>{c.code} {c.name}</h3><b>{c.score} / 5 條件符合</b><p>收盤 {c.close} · MA20 {c.ma20.toFixed(2)}</p><p>K {c.k.toFixed(1)} / D {c.d.toFixed(1)} · MACD {c.macd.toFixed(2)}</p><ul>{c.reasons.map(r => <li key={r}>{r}</li>)}</ul><small>風險：隔日跳空、量縮與趨勢反轉；分數不是獲利機率。</small></article>)}</div>{!latest.candidates.length && <p>沒有符合目前研究條件的標的；不強制湊滿三檔。</p>}</> : <p>尚未分析。系統不提供虛構範例行情或績效。</p>}</section>
+    </div><div hidden={page !== 'trades'}><section><h2>記錄手動交易</h2><p>可一次填入完整已結束交易，或先保存未平倉紀錄。v0.1 尚不支援修改既有交易，請先用模擬資料驗證流程。</p><form onSubmit={e => { e.preventDefault(); const form = e.currentTarget, f = new FormData(form); void perform(async () => { await api('trades', { code: f.get('code'), buyDate: f.get('buyDate'), buyPrice: Number(f.get('buyPrice')), quantity: Number(f.get('quantity')), fees: Number(f.get('fees')), note: f.get('note'), ...(f.get('sellDate') ? { sellDate: f.get('sellDate'), sellPrice: Number(f.get('sellPrice')) } : {}) }); form.reset(); }); }}><label>代碼<input name="code" required pattern="[0-9]{4}" /></label><label>買進日期<input name="buyDate" type="date" required /></label><label>買進價<input name="buyPrice" type="number" min="0.001" step="any" required /></label><label>股數<input name="quantity" type="number" min="1" step="1" required /></label><label>賣出日期<input name="sellDate" type="date" /></label><label>賣出價<input name="sellPrice" type="number" min="0.001" step="any" /></label><label>總費稅（元）<input name="fees" type="number" min="0" step="any" defaultValue="0" required /></label><label>備註<input name="note" /></label><button disabled={busy}>保存交易</button></form><div className="scroll"><table><thead><tr><th>代碼</th><th>買進日</th><th>賣出日</th><th>股數</th><th>成本後損益</th></tr></thead><tbody>{state.trades.map(t => <tr key={t.id}><td>{t.code}</td><td>{t.buyDate}</td><td>{t.sellDate || '未平倉'}</td><td>{t.quantity}</td><td>{t.sellPrice ? ((t.sellPrice - t.buyPrice) * t.quantity - t.fees).toFixed(2) : '尚未實現'}</td></tr>)}</tbody></table></div></section>
+    </div><section hidden={page !== 'research'}><h2>歷史研究紀錄</h2>{state.runs.map(r => <p key={r.id}>{r.date} · {r.strategy} · {r.candidates.map(c => c.code).join('、') || '無合格標的'} · {new Date(r.createdAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}</p>)}</section><footer>紀錄保存在本機；問題與勾選的研究資料會送至 OpenAI 分析。查詢使用你授權的 ChatGPT 額度或既有點數，可於 ChatGPT 設定限制用量；本工具不購買點數、不使用付費 API 備援、不串券商下單。</footer>
+    </QueryPanel> : <div className="loading-screen">{heading}<p role="status">{message || '正在載入本機工具…'}</p></div>}
+  </main>;
+}
+createRoot(document.getElementById('root')!).render(<App />);
