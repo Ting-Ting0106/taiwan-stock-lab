@@ -18,7 +18,7 @@ function App() {
   useEffect(() => { void refresh().catch(e => setMessage(e.message)); const onFocus = () => { void refresh().catch(() => {}); }; window.addEventListener('focus', onFocus); const timer = setInterval(() => { void refresh().catch(() => setMessage('本機服務未連線，請確認服務是否開啟')); }, 5000); return () => { clearInterval(timer); window.removeEventListener('focus', onFocus); }; }, [refresh]);
   async function perform(action: () => Promise<unknown>) { setBusy(true); setMessage('處理中…'); try { await action(); await refresh(); setMessage('已完成並保存'); } catch (e) { setMessage(e instanceof Error ? e.message : '處理失敗'); } finally { setBusy(false); } }
   const latest = state.runs[0];
-  const heading = <header><span>TAIWAN / DAILY RESEARCH</span><h1>每日台股研究室</h1><p>v0.9.1 · ChatGPT 分析 · 10萬元虛擬交易</p>{state.instance && <p><span className="badge">{state.instance.role === 'codex' ? 'Codex 預覽版本' : '你的專用版本'} · {state.instance.port}</span></p>}</header>;
+  const heading = <header><span>TAIWAN / DAILY RESEARCH</span><h1>每日台股研究室</h1><p>v0.10.0 · ChatGPT 分析 · 10萬元虛擬交易</p>{state.instance && <p><span className="badge">{state.instance.role === 'codex' ? 'Codex 預覽版本' : '你的專用版本'} · {state.instance.port}</span></p>}</header>;
   return <main>
     {state.auth && state.schedule ? <QueryPanel auth={state.auth} schedule={state.schedule} queries={state.queries ?? []} onChanged={refresh} heading={heading} page={page} navigate={navigate}>
     <div hidden={page !== 'paper'}>{state.paper && <PaperPanel account={state.paper} busy={busy} onToggle={()=>void perform(()=>api('paper/settings',{enabled:!state.paper!.enabled}))}/>}<p role="status">{page==='paper'?message:''}</p></div>

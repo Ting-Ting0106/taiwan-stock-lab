@@ -119,8 +119,8 @@ test('固定分類區分條件候選、缺資料、規則排除；最多三檔�
  const stocks:Array<MarketStock>=Array.from({length:4},(_,i)=>({...good(),code:String(2300+i)}));
  stocks.push({...good(),code:'3000',quote:undefined},{...good(),code:'3001',score:3},{...good(),code:'3002',quote:{...good().quote,price:99}},{...good(),code:'3003',indicators:undefined},{...good(),code:'3004',quote:{...good().quote,at:'2026-10-16T09:00:00+08:00'}});
  const report:import('../shared/market').MarketResearch={version:'market-evidence-0.2.0',collectedAt:now.toISOString(),mode:'intraday',quality:'partial',screening:'incomplete',universeCount:9,poolCount:9,technicalCount:8,markets:[],stocks,sources:[],limitations:[]};
- const result=classifyCandidates(report,now);assert.equal(result.conditional,4);assert.equal(result.selected.length,3);assert.equal(result.pending,3);assert.equal(result.excluded,2);assert.equal(result.technicalPassed,7);
- assert.match(stocks[4].assessment!.reasons.join(),/成交/);assert.equal(stocks[6].assessment?.status,'excluded');
+ const result=classifyCandidates(report,now);assert.equal(result.conditional,7);assert.equal(result.selected.length,3);assert.equal(result.pending,1);assert.equal(result.excluded,1);assert.equal(result.technicalPassed,7);
+ assert.equal(stocks[4].assessment?.status,'conditional');assert.equal(stocks[6].assessment?.status,'conditional');
  report.mode='after_hours';const after=classifyCandidates(report,now);assert.equal(stocks[4].assessment?.status,'conditional');assert.equal(after.selected.length,3);
  stocks.forEach(s=>s.score=0);assert.equal(classifyCandidates(report,now).selected.length,0);
 });

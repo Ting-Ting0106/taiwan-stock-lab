@@ -135,3 +135,14 @@ details small { overflow-wrap: anywhere; }
 .market-evidence p { font-size: 13px; }
 .market-evidence td { font-size: 13px; }.market-issues { white-space: normal; min-width: 220px; max-width: 360px; }
 .market-evidence small { white-space: normal; }
+
+/* Query states retain text labels; color is supplementary. */
+.query-status { font-weight:700; border:1px solid currentColor; }
+.status-running { background:#123d65; color:#addcff; }
+.status-succeeded { background:#134538; color:#a3f3cb; }
+.status-failed { background:#5c2029; color:#ffb7c2; }
+.status-interrupted { background:#45315d; color:#e7ccff; }
+.status-missed { background:#553a17; color:#ffdc9e; }
+.status-market_closed { background:#344151; color:#d4dde8; }
+.status-market_unknown { background:#51480f; color:#fff0a3; }
+.completion-notice[class*=status-] { border-left:4px solid currentColor; }

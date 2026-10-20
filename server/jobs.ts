@@ -50,7 +50,9 @@ export class QueryJobs {
       const marketResearch = job.webSearch ? await this.collect(job.prompt) : undefined;
       if (marketResearch) await mutate(db => { const target = db.queries.find(q => q.id === job.id); if (target) target.marketResearch = marketResearch; });
       if ((await this.auth.status()).profileId !== job.profileId) throw new Error('資料準備期間登入帳號已變更，未發送 AI 查詢');
-      const response = await this.execute(this.auth, job, research, job.profileId, marketResearch);
+      const feedback=(job.paperTrade||job.trendMode?db.paper?.days??[]:[]).filter(d=>d.review&&Date.parse(d.review.evaluatedAt)<=Date.parse(job.createdAt)).slice(-5).map(d=>({id:d.id,date:d.date,strategy:d.strategy,review:d.review!}));
+      await mutate(db=>{const target=db.queries.find(q=>q.id===job.id);if(target)target.feedbackIds=feedback.map(d=>d.id);});
+      const response = await this.execute(this.auth, job, research, job.profileId, marketResearch, feedback);
       result = { ...response, status: 'succeeded', researchId: research?.id };
     } catch (e) { result = { ...(e instanceof UnverifiedResponseError ? e.result : {}), status: 'failed', error: e instanceof Error ? e.message : '查詢失敗' }; }
     await mutate(db => { const target = db.queries.find(q => q.id === job.id); if (target) Object.assign(target, result, { finishedAt: new Date().toISOString() }); });
@@ -72,7 +74,7 @@ export class QueryJobs {
         if(JSON.stringify(schedule)!==JSON.stringify(initial))return undefined;
         if (decision === 'wait') return undefined;
         schedule.lastAttemptDate = clock.date;
-        const job: Query = { paperTrade: schedule.paperTrade, prompt: schedule.prompt, model: schedule.model, webSearch: schedule.webSearch, includeResearch: schedule.includeResearch, id: randomUUID(), createdAt: now.toISOString(), trigger: 'schedule', profileId: schedule.ownerProfileId, sources: [], marketCheck, status: marketCheck.state === 'closed' ? 'market_closed' : marketCheck.state === 'unknown' ? 'market_unknown' : decision === 'due' ? 'running' : 'missed', ...(decision === 'missed' ? { finishedAt: now.toISOString(), error: '服務未在排程時間起的五分鐘內執行，已略過；不會補發過期查詢' } : {}) };
+        const job: Query = { trendMode: schedule.paperTrade || schedule.trendMode, paperTrade: schedule.paperTrade, prompt: schedule.prompt, model: schedule.model, webSearch: schedule.webSearch, includeResearch: schedule.includeResearch, id: randomUUID(), createdAt: now.toISOString(), trigger: 'schedule', profileId: schedule.ownerProfileId, sources: [], marketCheck, status: marketCheck.state === 'closed' ? 'market_closed' : marketCheck.state === 'unknown' ? 'market_unknown' : decision === 'due' ? 'running' : 'missed', ...(decision === 'missed' ? { finishedAt: now.toISOString(), error: '服務未在排程時間起的五分鐘內執行，已略過；不會補發過期查詢' } : {}) };
         if(marketCheck.state!=='open'){job.finishedAt=effectiveNow.toISOString();job.error=marketCheck.reason;}
         db.queries.push(job); return job;
       });

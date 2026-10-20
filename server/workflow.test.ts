@@ -25,6 +25,9 @@ class QueryJobs extends LiveQueryJobs {
 }
 const { parseResponseStream, verifyWebSources, UnverifiedResponseError } = await import('./ai.ts');
 const { normalizeUsage, UsageMonitor, resolveCodexExecutable } = await import('./usage.ts');
+// Complete asynchronous fixture setup before registering tests or cleanup hooks.
+const { publicKey, privateKey } = await generateKeyPair('RS256');
+const key = { ...await exportJWK(publicKey), kid: 'synthetic-key', alg: 'RS256', use: 'sig' };
 after(async () => {
   process.chdir(original);
   assert.equal(dirname(resolve(temporary)), resolve(tmpdir()));
@@ -80,8 +83,6 @@ test('台北時區、週末、每日去重與五分鐘錯過規則', () => {
   assert.equal(scheduleDecision({ ...schedule, lastAttemptDate: '2026-10-15' }, new Date('2026-10-15T04:00:00Z')), 'wait');
 });
 
-const { publicKey, privateKey } = await generateKeyPair('RS256');
-const key = { ...await exportJWK(publicKey), kid: 'synthetic-key', alg: 'RS256', use: 'sig' };
 let expectedNonce = '', expiry = 3600, refreshCount = 0, wrongNonce = false;
 const mockFetch: typeof fetch = async (input, init) => {
   const url = input instanceof Request ? input.url : input.toString();
@@ -343,4 +344,23 @@ test('休市與開休市未確認均保存略過、每日去重，不讀行情�
   const db=await read();assert.equal(db.queries.length,count+1);assert.equal(db.queries.at(-1)?.status,state==='closed'?'market_closed':'market_unknown');assert.equal(db.queries.at(-1)?.marketResearch,undefined);assert.equal(db.queries.at(-1)?.marketCheck?.state,state);assert.equal(db.schedule.lastAttemptDate,'2026-10-16');
  }}finally{await auth.logout();}
  assert.equal(calls,0);assert.equal(collected,0);
+});
+
+test('趨勢AI請求包含前次驗證並解析結構化名單，無合法JSON不猜買進',async()=>{
+ const {queryAI}=await import('./ai.ts');const auth=new ChatGPTAuth(mockFetch,memoryVault());await connect(auth);
+ const evidence:import('../shared/market').MarketResearch={version:'market-evidence-0.2.0',collectedAt:'2026-10-20T04:00:00Z',mode:'intraday',quality:'eod_only',screening:'completed',universeCount:1,poolCount:1,technicalCount:1,markets:[],sources:[],limitations:[],stocks:[{code:'2330',name:'合成',market:'TWSE',industry:'合成',date:'2026-10-19',open:99,high:101,low:98,close:100,volume:1000,changePercent:1,historyCount:100,score:5,signals:[],sources:[],issues:[],assessment:{status:'conditional',reasons:[],selected:true},indicators:{ma5:99,ma10:98,ma20:97,ma60:90,k:60,d:50,dif:2,signal:1,histogram:2,volumeRatio:2}}]};
+ const feedback=[{id:'review-old',date:'2026-10-19',strategy:'next-day-trend-0.2.0',review:{version:'trend-review-0.1.0' as const,evaluatedAt:'2026-10-20T03:00:00Z',status:'completed' as const,sampleCount:1,verifiedCount:1,correctCount:0,findings:['合成反向'],suggestions:['合成建議，不自動改公式']}}];
+ const fence=String.fromCharCode(96).repeat(3);let text='偏多分析\n'+fence+'trend-decision\n'+JSON.stringify({version:'ai-trend-0.1.0',selected:[{market:'TWSE',code:'2330',reason:'合成理由'}],summary:'合成'})+'\n'+fence;
+ const previous=globalThis.fetch;let body:any;
+ globalThis.fetch=async(input,init)=>{if(String(input).endsWith('/models'))return Response.json({models:[{slug:'test',display_name:'合成',visibility:'list'}]});assert.equal(String(input),'https://api.openai.com/v1/responses');body=JSON.parse(String(init?.body));return new Response(stream([{type:'response.completed',response:{output:[{content:[{type:'output_text',text,annotations:[{type:'url_citation',url:'https://www.twse.com.tw/',title:'合成來源'}]}]}]}}]));};
+ try{const result=await queryAI(auth,{prompt:'合成',model:'test',webSearch:true,includeResearch:false,paperTrade:true},undefined,'oaiapp_synthetic',evidence,feedback);assert.equal(result.trendDecision?.selected[0].code,'2330');assert.ok(!result.output.includes('trend-decision'));const context=JSON.parse(body.input[0].content);assert.deepEqual(context.previousTrendReviews,feedback);assert.equal(context.trendMode,true);assert.match(body.instructions,/不提供等待買價/);text='只有文字，沒有決策';const invalid=await queryAI(auth,{prompt:'合成',model:'test',webSearch:true,includeResearch:false,trendMode:true},undefined,'oaiapp_synthetic',evidence);assert.equal(invalid.trendDecision,undefined);assert.ok(invalid.trendDecisionError);}finally{globalThis.fetch=previous;await auth.logout();}
+});
+
+test('下一次趨勢分析只取得發布前已知的驗證，排除未來資料並保存回饋ID',async()=>{
+ const auth=new ChatGPTAuth(mockFetch,memoryVault());await connect(auth);let received:any;
+ const report={version:'market-evidence-0.2.0' as const,collectedAt:'2026-10-20T04:00:00Z',mode:'intraday' as const,quality:'unavailable' as const,screening:'incomplete' as const,universeCount:0,poolCount:0,technicalCount:0,markets:[],stocks:[],sources:[],limitations:[]};
+ const review={version:'trend-review-0.1.0' as const,evaluatedAt:'2026-10-21T03:00:00Z',status:'completed' as const,sampleCount:1,verifiedCount:1,correctCount:0,findings:['合成'],suggestions:['合成建議']};
+ await mutate(db=>{db.paper={version:'paper-trend-0.2.0',enabled:false,initialCash:100000,cash:100000,positions:[],days:['known','future'].map(id=>({id,date:'2026-10-20',queryId:id,strategy:'合成',publishedAt:'2026-10-20T04:00:00Z',model:'test',prompt:'合成',snapshotHash:'合成',snapshot:report,selected:[],state:'processed' as const,notes:[],review:{...review,evaluatedAt:id==='known'?'2026-10-21T03:00:00Z':'2026-10-21T04:01:00Z'}}))};db.schedule={...defaultSchedule(),trendMode:true,enabled:true,model:'test',ownerProfileId:'oaiapp_synthetic'};});
+ const jobs=new QueryJobs(auth,async(_a,_i,_r,_p,_m,feedback)=>{received=feedback;return {output:'合成',sources:[]};});
+ try{await jobs.tick(new Date('2026-10-21T04:00:00Z'));assert.deepEqual(received.map((x:any)=>x.id),['known']);assert.deepEqual((await read()).queries.at(-1)?.feedbackIds,['known']);}finally{await auth.logout();}
 });

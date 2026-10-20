@@ -53,3 +53,9 @@ market-evidence-0.2.0 新增 selection（規則版本、分類時間、技術通
 ## v0.9.1 開市證據
 
 官方指數：https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw%7Cotc_o00.tw&json=1&delay=0 ，2026-10-16唯讀實測HTTP200，rtcode=0000，tse/t00及otc/o00均有當日d、t、正值z。年度日曆與指數只做查核，不傳入買進成交假設。query新增可缺省marketCheck（日期、open/closed/unknown、原因、查核時間與來源），新增market_closed／market_unknown狀態；舊紀錄不回填。
+
+## v0.10.0 趨勢決策與驗證資料
+
+Query新增trendMode、trendDecision（經schema驗證的AI代碼／理由／總結）、trendDecisionError及feedbackIds。模型價格不當作成交價；只用官方資料包或新取得參考價。JSON區塊驗證後獨立保存，正文移除，錯誤則保留未解析文字並禁止建立正式部位。
+
+paper新版本paper-trend-0.2.0，PaperDay保存mode=trend_11、origin=schedule、decision與review；Position保存entryBasis、entryObservedAt與evaluation（目標日11時、觀察時間、原始價、漲跌、方向、正確／錯誤／持平／未驗證及原因）。估價或遲到樣本不納正式命中率。舊版可缺省所有新欄位，保留舊規則，不回填。

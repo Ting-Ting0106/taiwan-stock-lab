@@ -34,9 +34,9 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => { const d = new
 const price = z.number().finite().positive();
 const bar = z.object({ code: z.string().regex(/^\d{4}$/), name: z.string().min(1).max(100), market: z.enum(['TWSE', 'TPEX']), date, open: price, high: price, low: price, close: price, volume: z.number().finite().nonnegative() }).refine(b => b.high >= Math.max(b.open, b.close, b.low) && b.low <= Math.min(b.open, b.close), 'OHLC 高低價不合理');
 const wrap = (fn: express.RequestHandler): express.RequestHandler => (req, res, next) => { Promise.resolve(fn(req, res, next)).catch(next); };
-app.get('/api/health', (_req, res) => { res.json({ application: 'taiwan-stock-lab', version: '0.9.1', instanceId: process.env.DESKTOP_INSTANCE_ID ?? '', running: jobs.running }); });
+app.get('/api/health', (_req, res) => { res.json({ application: 'taiwan-stock-lab', version: '0.10.0', instanceId: process.env.DESKTOP_INSTANCE_ID ?? '', running: jobs.running }); });
 app.get('/api/state', wrap(async (_req, res) => {
-  const db = await read(); res.json({ version: '0.9.1', instance: { role: instance, port, dataDirectory }, bars: db.bars.length, dates: [...new Set(db.bars.map(b => b.date))].sort().reverse(), trades: db.trades, runs: db.runs.slice(-30).reverse(), noonEnabled: false, auth: await auth.status(), queries: db.queries.slice(-50).reverse(), schedule: db.schedule, paper: db.paper ?? initialPaper() });
+  const db = await read(); res.json({ version: '0.10.0', instance: { role: instance, port, dataDirectory }, bars: db.bars.length, dates: [...new Set(db.bars.map(b => b.date))].sort().reverse(), trades: db.trades, runs: db.runs.slice(-30).reverse(), noonEnabled: false, auth: await auth.status(), queries: db.queries.slice(-50).reverse(), schedule: db.schedule, paper: db.paper ?? initialPaper() });
 }));
 app.post('/api/auth/start', wrap(async (req, res) => {
   const { profileId } = z.object({ profileId: z.string().max(200).optional() }).parse(req.body);
@@ -72,10 +72,11 @@ app.get('/api/models', wrap(async (_req, res) => { res.json(await listModels(aut
 app.get('/api/usage', wrap(async (_req, res) => { res.json(await usage.get()); }));
 app.post('/api/usage/refresh', wrap(async (_req, res) => { res.json(await usage.get(true)); }));
 app.post('/api/paper/settings', wrap(async (req,res)=>{const {enabled}=z.object({enabled:z.boolean()}).parse(req.body);const paper=await mutate(db=>{db.paper??=initialPaper();db.paper.enabled=enabled;return db.paper;});res.json(paper);}));
-const queryInput = z.object({ paperTrade: z.boolean().optional(), prompt: z.string().trim().min(1).max(4000), model: z.string().min(1).max(200), webSearch: z.boolean(), includeResearch: z.boolean() });
+const queryInput = z.object({ trendMode:z.boolean().optional(), paperTrade: z.boolean().optional(), prompt: z.string().trim().min(1).max(4000), model: z.string().min(1).max(200), webSearch: z.boolean(), includeResearch: z.boolean() });
 app.post('/api/queries', wrap(async (req, res) => { const job = await jobs.manual(queryInput.parse(req.body)); res.status(202).json(job); }));
 app.post('/api/schedule', wrap(async (req, res) => {
   const input = queryInput.extend({ model: z.string().max(200), enabled: z.boolean(), time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/), weekdays: z.array(z.number().int().min(1).max(5)).min(1).max(5) }).parse(req.body);
+  if(input.paperTrade&&input.time!=='12:00')throw new Error('正式虛擬趨勢交易固定12:00分析，次交易日11:00檢驗');
   const account = await auth.status();
   if (input.enabled) {
     if (!account.connected || !account.planEnabled) throw new Error('啟用排程前，請先登入並授權使用 ChatGPT 額度');

@@ -10,7 +10,7 @@ export interface MarketStock {
 }
 export interface MarketResearch {
   version: 'market-evidence-0.1.0' | 'market-evidence-0.2.0';
-  selection?: { version: 'next-day-conditions-0.1.0'; assessedAt: string; technicalPassed: number; conditional: number; pending: number; excluded: number; selected: string[]; limitations: string[] }; collectedAt: string; mode: 'intraday' | 'after_hours';
+  selection?: { version: 'next-day-conditions-0.1.0' | 'next-day-trend-0.2.0'; assessedAt: string; technicalPassed: number; conditional: number; pending: number; excluded: number; selected: string[]; limitations: string[] }; collectedAt: string; mode: 'intraday' | 'after_hours';
   quality: 'intraday_available' | 'eod_only' | 'partial' | 'unavailable';
   screening: 'completed' | 'incomplete'; universeCount: number; poolCount: number; technicalCount: number;
   markets: { market: 'TWSE' | 'TPEX'; count: number; date?: string }[];
