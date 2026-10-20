@@ -146,3 +146,5 @@ details small { overflow-wrap: anywhere; }
 .status-market_closed { background:#344151; color:#d4dde8; }
 .status-market_unknown { background:#51480f; color:#fff0a3; }
 .completion-notice[class*=status-] { border-left:4px solid currentColor; }
+
+.paper-day{margin:18px 0;padding:18px;border:1px solid #40566d;border-radius:10px;background:#152536}.paper-day header,.paper-stocks{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.paper-day header h3{margin:0}.paper-times{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:18px 0}.paper-times div{padding:12px;background:#0e1b2b;border-radius:6px}.paper-times small,.paper-times strong,.paper-times span{display:block}.paper-times strong{font-size:17px;margin:6px 0;color:#d9f4ff}

@@ -1,6 +1,6 @@
 import { TradingCalendar } from './calendar.ts';
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {initialPaper,recordPaperDay,executePaperBuys,settlePaper,parsePaperCalendar,nextPaperSession} from './paper.ts';
+import {retrospectivelyBuyDay,initialPaper,recordPaperDay,executePaperBuys,settlePaper,parsePaperCalendar,nextPaperSession} from './paper.ts';
 import {extractTrendDecision} from './trend.ts';import type {Database,Query} from '../shared/model';import type {MarketResearch,MarketStock} from '../shared/market';
 const now=new Date('2026-10-16T04:02:00Z');
 function fixture(){
@@ -75,4 +75,27 @@ test('開市須兩市場當日交易，舊日／過期／單邊資料都不發�
 test('分析快照或前收估價雖直接假想進場，11時方向仍與正式命中率分開',()=>{
  const f=fixture(),day=recordPaperDay(f.db,f.query,now,'2026-10-19')!;day.snapshot.stocks[0].quote=undefined;executePaperBuys(f.db.paper!,day.id,[],now);assert.equal(f.db.paper!.positions.length,3);
  f.rows.forEach(s=>{s.quote!.at='2026-10-19T10:59:59+08:00';s.quote!.price=102;});settlePaper(f.db.paper!,f.rows,new Date('2026-10-19T03:00:00Z'));assert.ok(f.db.paper!.positions.every(p=>p.closedAt&&p.evaluation?.direction==='up'&&p.evaluation.verdict==='unverified'));assert.equal(day.review?.verifiedCount,0);
+});
+
+test('回溯補記整數股資金守恆、保留原紀錄、重複不扣款且排除正式命中率',()=>{
+ const f=fixture(),day=recordPaperDay(f.db,f.query,now,'2026-10-19')!;
+ day.state='processed';day.notes.push('原未成交');const hash=day.snapshotHash;
+ retrospectivelyBuyDay(f.db.paper!,day.id,now);
+ const account=f.db.paper!,cash=account.cash;
+ assert.equal(account.positions.length,3);assert.ok(account.positions.every(p=>Number.isInteger(p.quantity)&&p.retrospectiveAt));
+ assert.ok(Math.abs(cash+account.positions.reduce((s,p)=>s+p.cost,0)-100000)<.001);assert.ok(cash>=0);
+ assert.equal(day.notes[0],'原未成交');assert.equal(day.snapshotHash,hash);
+ retrospectivelyBuyDay(account,day.id,now);assert.equal(account.cash,cash);assert.equal(account.positions.length,3);
+ f.rows.forEach(s=>{s.quote!.at='2026-10-19T11:00:00+08:00';s.quote!.price=110;});
+ settlePaper(account,f.rows,new Date('2026-10-19T03:00:00Z'));
+ assert.ok(account.positions.every(p=>p.evaluation?.verdict==='unverified'));assert.equal(day.review?.verifiedCount,0);
+ assert.ok(day.review?.findings.every(x=>x.includes('合成')));
+});
+test('回溯補記缺價或資金不足整批拒絕，不留下部分扣款',()=>{
+ for(const bad of ['price','cash']){
+  const f=fixture(),day=recordPaperDay(f.db,f.query,now)!;day.state='processed';
+  if(bad==='price')day.snapshot.stocks[2].quote=undefined;else f.db.paper!.cash=1;
+  const before=JSON.stringify(f.db.paper);assert.throws(()=>retrospectivelyBuyDay(f.db.paper!,day.id,now));
+  assert.equal(JSON.stringify(f.db.paper),before);
+ }
 });

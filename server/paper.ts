@@ -63,6 +63,35 @@ export function executePaperBuys(account:PaperAccount,dayId:string,stocks:Market
   day.notes.push(key+'：按'+(basis==='observed'?'觀察參考價':basis==='analysis_snapshot'?'分析快照價':'已知收盤估價')+' '+price+' 假想買進；不等待撮合或進場區間');
  }
 }
+
+/** Explicit user correction only; never called by the scheduler. Atomic in memory. */
+export function retrospectivelyBuyDay(account:PaperAccount,dayId:string,now=new Date()){
+ const day=account.days.find(d=>d.id===dayId);
+ if(!day)throw Error('找不到原始名單');
+ if(day.retrospective)return;
+ if(account.positions.some(p=>p.queryId===day.queryId))throw Error('已有部位，拒絕重複補記');
+ if(!day.selected.length||day.selected.length>3||new Set(day.selected).size!==day.selected.length)throw Error('名單不合法');
+ if(account.positions.filter(p=>!p.closedAt).length+day.selected.length>3)throw Error('持倉名額不足');
+ const rows=day.selected.map(key=>{
+  const stock=day.snapshot.stocks.find(s=>s.market+':'+s.code===key);
+  if(!stock?.quote||!positive(stock.quote.price)||!Number.isFinite(Date.parse(stock.quote.at))||!stock.quote.at.startsWith(day.date+'T'))throw Error('缺原日快照價格');
+  return stock;
+ });
+ const positions:PaperPosition[]=[];let cash=account.cash;
+ for(const [index,stock] of rows.entries()){
+  const price=stock.quote!.price,budget=cash/(rows.length-index);
+  let quantity=Math.floor(budget/(price*1.002));
+  while(quantity>0&&money(price*quantity+fee(price*quantity,.002))>budget)quantity--;
+  if(quantity<1)throw Error('資金不足以分配整數股');
+  const buyFee=fee(price*quantity,.002),cost=money(price*quantity+buyFee);
+  cash=money(cash-cost);
+  positions.push({id:randomUUID(),mode:'trend_11',entryBasis:'analysis_snapshot',retrospectiveAt:now.toISOString(),entryObservedAt:now.toISOString(),code:stock.code,name:stock.name,market:stock.market,queryId:day.queryId,openedAt:day.publishedAt,quoteAt:stock.quote!.at,buyQuote:structuredClone(stock.quote),buySource:stock.sources.at(-1),quantity,buyPrice:price,buyFee,cost,mark:price,markedAt:stock.quote!.at,plannedExitDate:day.plannedExitDate,calendarSource:day.calendarSource,issue:'依使用者指示回溯假想買進；不納正式命中率'});
+ }
+ day.retrospective={recordedAt:now.toISOString(),originalState:day.state,reason:'使用者要求將原未成交三檔按原日快照補記；整數股均分可用資金，保留原未成交紀錄'};
+ day.mode='trend_11';day.state='processed';day.notes.push(day.retrospective.reason);
+ account.cash=cash;account.positions.push(...positions);
+}
+
 function closePosition(account:PaperAccount,p:PaperPosition,price:number,now:Date,stock:MarketStock,reason:string){
  const sellFee=fee(price*p.quantity,0.005),proceeds=money(price*p.quantity-sellFee);
  account.cash=money(account.cash+proceeds);
@@ -75,7 +104,7 @@ export function buildPaperReviews(account:PaperAccount,now:Date){
   const positions=account.positions.filter(p=>p.queryId===day.queryId&&p.mode==='trend_11');
   if(!positions.length)continue;
   const verified=positions.filter(p=>p.evaluation&&p.evaluation.verdict!=='unverified'),correct=verified.filter(p=>p.evaluation!.verdict==='correct');
-  const findings=positions.map(p=>p.evaluation?p.code+'：'+p.evaluation.direction+' '+p.evaluation.changePercent.toFixed(2)+'%；'+(p.evaluation.verdict==='unverified'?'非準時／估價樣本，不納命中率':p.evaluation.verdict)+'；成本後損益 '+p.pnl:p.code+'：11時資料待補，未判輸贏');
+  const findings=positions.map(p=>p.evaluation?p.code+' '+p.name+'：'+({up:'上漲',down:'下跌',flat:'持平'}[p.evaluation.direction])+' '+p.evaluation.changePercent.toFixed(2)+'%；'+(p.evaluation.verdict==='unverified'?'非準時／估價樣本，不納命中率':({correct:'方向猜對',wrong:'方向猜錯',flat:'持平',unverified:'未驗證'}[p.evaluation.verdict]))+'；成本後損益 '+p.pnl:p.code+' '+p.name+'：11時資料待補，未判輸贏');
   const losers=verified.filter(p=>p.evaluation!.verdict==='wrong');
   const hot=losers.filter(p=>(day.snapshot.stocks.find(s=>s.code===p.code&&s.market===p.market)?.indicators?.k??0)>=80).length;
   if(hot)findings.push('失敗樣本中 '+hot+' 檔預測時K≥80；僅為共現，未確認因果');
@@ -102,8 +131,8 @@ export function settlePaper(account:PaperAccount,stocks:MarketStock[],now=new Da
   }
   const onTime=clock.date===p.plannedExitDate&&clock.minutes<665;
   const direction=q.price>p.buyPrice?'up':q.price<p.buyPrice?'down':'flat';
-  const verdict:TrendEvaluation['verdict']=!onTime||p.entryBasis!=='observed'?'unverified':direction==='up'?'correct':direction==='down'?'wrong':'flat';
-  p.evaluation={version:'trend-review-0.1.0',targetDate:p.plannedExitDate,targetTime:'11:00',observedAt:now.toISOString(),quoteAt:q.at,entryPrice:p.buyPrice,exitPrice:q.price,changePercent:(q.price/p.buyPrice-1)*100,direction,verdict,onTime,note:!onTime?'錯過11時窗口，依目前參考價延遲結算，不算11時驗證':p.entryBasis==='previous_close'?'進場採已知收盤估價，不算今日買進的正式命中率':p.entryBasis==='analysis_snapshot'?'以分析截面作假想進場，非發布後觀察價，不納正式命中率':'準時觀察最近成交驗證方向，非實際委託成交'};
+  const verdict:TrendEvaluation['verdict']=p.retrospectiveAt||!onTime||p.entryBasis!=='observed'?'unverified':direction==='up'?'correct':direction==='down'?'wrong':'flat';
+  p.evaluation={version:'trend-review-0.1.0',targetDate:p.plannedExitDate,targetTime:'11:00',observedAt:now.toISOString(),quoteAt:q.at,entryPrice:p.buyPrice,exitPrice:q.price,changePercent:(q.price/p.buyPrice-1)*100,direction,verdict,onTime,note:p.retrospectiveAt?'回溯假想買進，僅供觀察，不納正式命中率':!onTime?'錯過11時窗口，依目前參考價延遲結算，不算11時驗證':p.entryBasis==='previous_close'?'進場採已知收盤估價，不算今日買進的正式命中率':p.entryBasis==='analysis_snapshot'?'以分析截面作假想進場，非發布後觀察價，不納正式命中率':'準時觀察最近成交驗證方向，非實際委託成交'};
   closePosition(account,p,q.price,now,stock!,p.evaluation.note);
  }
  buildPaperReviews(account,now);account.lastCheckedAt=now.toISOString();account.error=undefined;

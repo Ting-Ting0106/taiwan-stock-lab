@@ -59,3 +59,6 @@ market-evidence-0.2.0 新增 selection（規則版本、分類時間、技術通
 Query新增trendMode、trendDecision（經schema驗證的AI代碼／理由／總結）、trendDecisionError及feedbackIds。模型價格不當作成交價；只用官方資料包或新取得參考價。JSON區塊驗證後獨立保存，正文移除，錯誤則保留未解析文字並禁止建立正式部位。
 
 paper新版本paper-trend-0.2.0，PaperDay保存mode=trend_11、origin=schedule、decision與review；Position保存entryBasis、entryObservedAt與evaluation（目標日11時、觀察時間、原始價、漲跌、方向、正確／錯誤／持平／未驗證及原因）。估價或遲到樣本不納正式命中率。舊版可缺省所有新欄位，保留舊規則，不回填。
+
+### 回溯假想買進
+PaperDay.retrospective 保存 recordedAt、originalState、reason；PaperPosition.retrospectiveAt 記錄補記時間。openedAt 為原分析基準時間，不代表實際成交；價格取原日快照，quantity 為整數模擬股數（1000股=1張）。補記樣本一律不納正式命中率，原查詢與快照不變。

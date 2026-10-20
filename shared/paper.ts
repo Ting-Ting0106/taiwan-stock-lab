@@ -3,11 +3,12 @@ export interface TrendDecision {version:'ai-trend-0.1.0';selected:{market:'TWSE'
 export interface TrendEvaluation {version:'trend-review-0.1.0';targetDate:string;targetTime:'11:00';observedAt:string;quoteAt:string;entryPrice:number;exitPrice:number;changePercent:number;direction:'up'|'down'|'flat';verdict:'correct'|'wrong'|'flat'|'unverified';onTime:boolean;note:string}
 export interface PaperReview {version:'trend-review-0.1.0';evaluatedAt:string;status:'completed'|'partial';sampleCount:number;verifiedCount:number;correctCount:number;findings:string[];suggestions:string[]}
 export interface PaperPosition {
+ retrospectiveAt?:string;
  mode?:'trend_11';entryBasis?:'observed'|'analysis_snapshot'|'previous_close';entryObservedAt?:string;evaluation?:TrendEvaluation;
  buyQuote?:MarketResearch['stocks'][number]['quote'];sellQuote?:MarketResearch['stocks'][number]['quote'];buySource?:string;sellSource?:string;
  plannedExitDate?:string;calendarSource?:string;id:string;code:string;name:string;market:'TWSE'|'TPEX';queryId:string;openedAt:string;quoteAt:string;quantity:number;buyPrice:number;buyFee:number;cost:number;mark?:number;markedAt?:string;closedAt?:string;sellPrice?:number;sellFee?:number;proceeds?:number;pnl?:number;exitReason?:string;issue?:string;
 }
-export interface PaperDay {mode?:'trend_11';origin?:'schedule';decision?:TrendDecision;review?:PaperReview;plannedExitDate?:string;calendarSource?:string;id:string;date:string;queryId:string;strategy:string;publishedAt:string;model:string;prompt:string;snapshotHash:string;snapshot:MarketResearch;selected:string[];state:'recorded'|'zero'|'missed'|'processed'|'data_missing';notes:string[]}
+export interface PaperDay {retrospective?:{recordedAt:string;originalState:string;reason:string};mode?:'trend_11';origin?:'schedule';decision?:TrendDecision;review?:PaperReview;plannedExitDate?:string;calendarSource?:string;id:string;date:string;queryId:string;strategy:string;publishedAt:string;model:string;prompt:string;snapshotHash:string;snapshot:MarketResearch;selected:string[];state:'recorded'|'zero'|'missed'|'processed'|'data_missing';notes:string[]}
 export interface PaperAccount {version:'paper-next-session-0.1.0'|'paper-trend-0.2.0';initialCash:number;cash:number;enabled:boolean;positions:PaperPosition[];days:PaperDay[];lastCheckedAt?:string;error?:string}
 export const paperAssumptions=[
  '初始虛擬資金10萬元，AI結構化名單最多3檔；只有12:00正式排程能建立部位，手動查詢不占名單。',
