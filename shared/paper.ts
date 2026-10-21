@@ -1,7 +1,7 @@
 import type { MarketResearch } from './market';
 export interface TrendDecision {version:'ai-trend-0.1.0';selected:{market:'TWSE'|'TPEX';code:string;reason:string}[];summary:string}
 export interface TrendEvaluation {version:'trend-review-0.1.0';targetDate:string;targetTime:'11:00';observedAt:string;quoteAt:string;entryPrice:number;exitPrice:number;changePercent:number;direction:'up'|'down'|'flat';verdict:'correct'|'wrong'|'flat'|'unverified';onTime:boolean;note:string}
-export interface PaperReview {version:'trend-review-0.1.0';evaluatedAt:string;status:'completed'|'partial';sampleCount:number;verifiedCount:number;correctCount:number;findings:string[];suggestions:string[]}
+export interface PaperReview {audit?:{version:'snapshot-audit-0.1.0';integrity:'matched'|'mismatch';checks:string[];observations:string[];hypotheses:string[];limitations:string[]};version:'trend-review-0.1.0';evaluatedAt:string;status:'completed'|'partial';sampleCount:number;verifiedCount:number;correctCount:number;findings:string[];suggestions:string[]}
 export interface PaperPosition {
  retrospectiveAt?:string;
  mode?:'trend_11';entryBasis?:'observed'|'analysis_snapshot'|'previous_close';entryObservedAt?:string;evaluation?:TrendEvaluation;

@@ -21,13 +21,13 @@ test('桌面資料與執行檔分離，不把登入放在安裝或 ASAR 目錄',
   assert.equal(parent.OPENAI_API_KEY, 'synthetic-key');
 });
 test('接埠已被占用會另選，不把其他服務當成自己的後端', async () => {
-  const server = createServer((_req, res) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ application: 'taiwan-stock-lab', version: '0.10.1', instanceId: 'another-app', running: false })); });
+  const server = createServer((_req, res) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ application: 'taiwan-stock-lab', version: '0.10.4', instanceId: 'another-app', running: false })); });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = (server.address() as { port: number }).port;
   try {
     assert.notEqual(await findFreePort([port, 0]), port);
-    assert.equal(ownedHealth({ application: 'taiwan-stock-lab', instanceId: 'wrong', version: '0.10.1', running: false }, 'mine', '0.10.1'), false);
-    await assert.rejects(waitForServer('http://127.0.0.1:' + port, 'mine', '0.10.1', () => true, 250), /未能啟動/);
+    assert.equal(ownedHealth({ application: 'taiwan-stock-lab', instanceId: 'wrong', version: '0.10.4', running: false }, 'mine', '0.10.4'), false);
+    await assert.rejects(waitForServer('http://127.0.0.1:' + port, 'mine', '0.10.4', () => true, 250), /未能啟動/);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
 test('獨立打包後端不依賴專案 node_modules，能提供網頁與健康檢查', { skip: !existsSync(resolve('.desktop/server.cjs')) }, async () => {
@@ -36,9 +36,9 @@ test('獨立打包後端不依賴專案 node_modules，能提供網頁與健康�
   await copyFile(resolve('.desktop/server.cjs'), serverFile);
   const child = spawn(process.execPath, [serverFile], { cwd: directory, env: backendEnvironment(process.env, port, join(directory, 'data'), resolve('dist'), 'bundle-test'), windowsHide: true, stdio: 'ignore' });
   try {
-    await waitForServer('http://127.0.0.1:' + port, 'bundle-test', '0.10.1', () => child.exitCode === null, 15000);
+    await waitForServer('http://127.0.0.1:' + port, 'bundle-test', '0.10.4', () => child.exitCode === null, 15000);
     const state = await (await fetch('http://127.0.0.1:' + port + '/api/state')).json();
-    assert.equal(state.auth.connected, false); assert.equal(state.version, '0.10.1'); assert.equal(state.trades.length, 0);
+    assert.equal(state.auth.connected, false); assert.equal(state.version, '0.10.4'); assert.equal(state.trades.length, 0);
     assert.equal(state.instance.dataDirectory, join(directory, 'data'));
     assert.equal(state.paper.cash,100000);assert.equal(state.paper.positions.length,0);
     assert.equal((await fetch('http://127.0.0.1:' + port + '/')).status, 200);
@@ -63,7 +63,7 @@ test('桌面視窗生命週期：啟動不開瀏覽器、關閉隱藏、重複�
  const { EventEmitter }=await import('node:events'),{runInNewContext}=await import('node:vm'),{createRequire}=await import('node:module'),{readFile}=await import('node:fs/promises');
  const directory=await mkdtemp(join(tmpdir(),'stock-window-test-'));
  const windows:any[]=[],external:string[]=[],errors:string[]=[];let menu:any[]=[],worker:any,environment:any,exited=false;
- const app:any=Object.assign(new EventEmitter(),{setName(){},getPath(){return directory;},setPath(){},requestSingleInstanceLock(){return true;},whenReady:async()=>{},setAppUserModelId(){},getAppPath(){return directory;},isPackaged:true,getVersion(){return '0.10.1';},getLoginItemSettings(){return {openAtLogin:false};},exit(){exited=true;}});
+ const app:any=Object.assign(new EventEmitter(),{setName(){},getPath(){return directory;},setPath(){},requestSingleInstanceLock(){return true;},whenReady:async()=>{},setAppUserModelId(){},getAppPath(){return directory;},isPackaged:true,getVersion(){return '0.10.4';},getLoginItemSettings(){return {openAtLogin:false};},exit(){exited=true;}});
  class Window extends EventEmitter {
   options:any;webContents:any;url='';hidden=false;shows=0;destroyed=false;
   constructor(options:any){super();this.options=options;windows.push(this);this.webContents=Object.assign(new EventEmitter(),{session:{setPermissionRequestHandler(){},setPermissionCheckHandler(){}},setWindowOpenHandler(this:any,handler:any){this.popup=handler;},getURL:()=>this.url});}
@@ -73,7 +73,7 @@ test('桌面視窗生命週期：啟動不開瀏覽器、關閉隱藏、重複�
  const electron={app,BrowserWindow:Window,Tray,Menu:{buildFromTemplate:(value:any)=>value},nativeImage:{createFromPath:()=>({resize:()=>({})})},shell:{openExternal:async(url:string)=>{external.push(url);},openPath:async()=>''},dialog:{showErrorBox:(_title:string,message:string)=>errors.push(message)},utilityProcess:{fork:(_path:string,_args:any,options:any)=>{environment=options.env;worker=Object.assign(new EventEmitter(),{pid:123,postMessage(){worker.emit('exit',0);},kill(){worker.emit('exit',0);}});return worker;}}};
  const realRequire=createRequire(import.meta.url);
  try{
-  runInNewContext(await readFile(resolve('.desktop/main.cjs'),'utf8'),{require:(name:string)=>name==='electron'?electron:realRequire(name),module:{exports:{}},exports:{},process:{env:{},argv:['synthetic.exe'],resourcesPath:directory,execPath:'synthetic.exe'},Buffer,URL,AbortSignal,setTimeout,clearTimeout,console,fetch:async()=>Response.json({application:'taiwan-stock-lab',version:'0.10.1',instanceId:environment.DESKTOP_INSTANCE_ID,running:false})});
+  runInNewContext(await readFile(resolve('.desktop/main.cjs'),'utf8'),{require:(name:string)=>name==='electron'?electron:realRequire(name),module:{exports:{}},exports:{},process:{env:{},argv:['synthetic.exe'],resourcesPath:directory,execPath:'synthetic.exe'},Buffer,URL,AbortSignal,setTimeout,clearTimeout,console,fetch:async()=>Response.json({application:'taiwan-stock-lab',version:'0.10.4',instanceId:environment.DESKTOP_INSTANCE_ID,running:false})});
   for(let n=0;n<100&&!windows.length;n++)await new Promise(resolve=>setTimeout(resolve,10));
   assert.equal(windows.length,1);assert.deepEqual(external,[]);
   const window=windows[0];assert.equal(window.options.webPreferences.nodeIntegration,false);assert.equal(window.options.webPreferences.contextIsolation,true);assert.equal(window.options.webPreferences.sandbox,true);

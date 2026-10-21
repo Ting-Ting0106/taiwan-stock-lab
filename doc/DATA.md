@@ -62,3 +62,12 @@ paper新版本paper-trend-0.2.0，PaperDay保存mode=trend_11、origin=schedule�
 
 ### 回溯假想買進
 PaperDay.retrospective 保存 recordedAt、originalState、reason；PaperPosition.retrospectiveAt 記錄補記時間。openedAt 為原分析基準時間，不代表實際成交；價格取原日快照，quantity 為整數模擬股數（1000股=1張）。補記樣本一律不納正式命中率，原查詢與快照不變。
+
+### 每日歷史紀錄保存與顯示
+每日名單累積於 paper.days，新增日期不會清除舊資料；/api/state 回傳完整 paper 帳本，與查詢紀錄最新50筆的顯示限制分開。介面預設收合，標題顯示發布時間與股票中文名稱，依發布時間由新到舊排列。資料保存在各自電腦，刪除或重設資料目錄後不保留。
+
+### 0.10.3 保存資料核對
+新產生的 PaperReview.audit 可含 version=snapshot-audit-0.1.0、integrity、checks、observations、hypotheses、limitations。核對保存快照雜湊、時間、欄位及衍生乖離，並非官方原始數據獨立驗證；不宣稱完整指標重算。已完成的舊review不覆寫；新版從後續檢驗開始保存audit。此欄位隨既有review傳入下一次趨勢AI，不額外於11時呼叫AI。
+
+### 產業強弱摘要
+MarketResearch.sectorOverview（sector-snapshot-0.1.0）保存最新有效快照日期、同日涵蓋檔數與排除舊日檔數，各官方產業的總家數、有效漲跌家數、等權平均／中位數、上漲比例及漲幅靠前代表股。不是官方類股指數，尚無完整產業5／20日序列；小樣本不當作廣泛強勢。快照附欄位供AI與查詢紀錄顯示，不增加付費資料或券商串接。

@@ -1,6 +1,6 @@
 {
   "name": "taiwan-stock-lab",
-  "version": "0.10.1",
+  "version": "0.10.4",
   "private": true,
   "type": "module",
   "engines": {

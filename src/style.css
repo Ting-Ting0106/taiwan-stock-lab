@@ -147,4 +147,16 @@ details small { overflow-wrap: anywhere; }
 .status-market_unknown { background:#51480f; color:#fff0a3; }
 .completion-notice[class*=status-] { border-left:4px solid currentColor; }
 
-.paper-day{margin:18px 0;padding:18px;border:1px solid #40566d;border-radius:10px;background:#152536}.paper-day header,.paper-stocks{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.paper-day header h3{margin:0}.paper-times{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:18px 0}.paper-times div{padding:12px;background:#0e1b2b;border-radius:6px}.paper-times small,.paper-times strong,.paper-times span{display:block}.paper-times strong{font-size:17px;margin:6px 0;color:#d9f4ff}
+.paper-day{margin:18px 0;padding:18px;border:1px solid #40566d;border-radius:10px;background:#152536}.paper-stocks{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.paper-times{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:18px 0}.paper-times div{padding:12px;background:#0e1b2b;border-radius:6px}.paper-times small,.paper-times strong,.paper-times span{display:block}.paper-times strong{font-size:17px;margin:6px 0;color:#d9f4ff}
+
+.paper-history{list-style:none;padding:0;margin:0}
+.paper-history>li{margin:12px 0}
+.paper-history .paper-day{margin:0;padding:14px 18px}
+.paper-day>summary{font-size:16px;overflow-wrap:anywhere}
+.paper-history-title{font-size:19px;line-height:1.6}
+.paper-history-title time{margin-right:20px;font-variant-numeric:tabular-nums}
+.paper-history-title span{margin-right:12px}
+.paper-day>summary .badge{margin:4px 8px 4px 0}
+.paper-day[open]>summary{padding-bottom:12px;border-bottom:1px solid #40566d}
+.paper-day-record small{overflow-wrap:anywhere}
+@media(max-width:600px){.paper-history-title{display:block}.paper-history-title time,.paper-history-title span{display:block;margin-right:0}.paper-times{grid-template-columns:minmax(0,1fr)}}

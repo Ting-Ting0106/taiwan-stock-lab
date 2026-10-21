@@ -34,9 +34,9 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => { const d = new
 const price = z.number().finite().positive();
 const bar = z.object({ code: z.string().regex(/^\d{4}$/), name: z.string().min(1).max(100), market: z.enum(['TWSE', 'TPEX']), date, open: price, high: price, low: price, close: price, volume: z.number().finite().nonnegative() }).refine(b => b.high >= Math.max(b.open, b.close, b.low) && b.low <= Math.min(b.open, b.close), 'OHLC 高低價不合理');
 const wrap = (fn: express.RequestHandler): express.RequestHandler => (req, res, next) => { Promise.resolve(fn(req, res, next)).catch(next); };
-app.get('/api/health', (_req, res) => { res.json({ application: 'taiwan-stock-lab', version: '0.10.1', instanceId: process.env.DESKTOP_INSTANCE_ID ?? '', running: jobs.running }); });
+app.get('/api/health', (_req, res) => { res.json({ application: 'taiwan-stock-lab', version: '0.10.4', instanceId: process.env.DESKTOP_INSTANCE_ID ?? '', running: jobs.running }); });
 app.get('/api/state', wrap(async (_req, res) => {
-  const db = await read(); res.json({ version: '0.10.1', instance: { role: instance, port, dataDirectory }, bars: db.bars.length, dates: [...new Set(db.bars.map(b => b.date))].sort().reverse(), trades: db.trades, runs: db.runs.slice(-30).reverse(), noonEnabled: false, auth: await auth.status(), queries: db.queries.slice(-50).reverse(), schedule: db.schedule, paper: db.paper ?? initialPaper() });
+  const db = await read(); res.json({ version: '0.10.4', instance: { role: instance, port, dataDirectory }, bars: db.bars.length, dates: [...new Set(db.bars.map(b => b.date))].sort().reverse(), trades: db.trades, runs: db.runs.slice(-30).reverse(), noonEnabled: false, auth: await auth.status(), queries: db.queries.slice(-50).reverse(), schedule: db.schedule, paper: db.paper ?? initialPaper() });
 }));
 app.post('/api/auth/start', wrap(async (req, res) => {
   const { profileId } = z.object({ profileId: z.string().max(200).optional() }).parse(req.body);

@@ -1,7 +1,7 @@
 import { classifyCandidates } from './screening.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MarketCollector, indicators, marketDate, numeric, parseSnapshot, parseHistory, parseQuotes, choosePool } from './market.ts';
+import { MarketCollector, indicators, marketDate, numeric, parseSnapshot, parseHistory, parseQuotes, summarizeSectors, choosePool } from './market.ts';
 import type { Bar } from '../shared/model';
 import type { MarketStock } from '../shared/market';
 
@@ -123,4 +123,18 @@ test('固定分類區分條件候選、缺資料、規則排除；最多三檔�
  assert.equal(stocks[4].assessment?.status,'conditional');assert.equal(stocks[6].assessment?.status,'conditional');
  report.mode='after_hours';const after=classifyCandidates(report,now);assert.equal(stocks[4].assessment?.status,'conditional');assert.equal(after.selected.length,3);
  stocks.forEach(s=>s.score=0);assert.equal(classifyCandidates(report,now).selected.length,0);
+});
+
+test('產業摘要先分類且不混日期／缺值；先挑廣泛強勢類別而非單股暴漲',()=>{
+ const rows=[
+  ...[1,2,3].map(i=>({...stock(String(3000+i),'TWSE','強勢類別'),changePercent:4})),
+  ...[1,2,3].map((i,index)=>({...stock(String(4000+i),'TWSE','弱勢類別'),changePercent:[10,-5,-6][index]})),
+  {...stock('5000','TWSE','缺值類別'),changePercent:null},
+  {...stock('6000','TWSE','舊日類別'),date:'2026-10-14',changePercent:9}
+ ];
+ const summary=summarizeSectors(rows);assert.equal(summary.coveredStocks,7);assert.equal(summary.excludedOlderStocks,1);
+ assert.equal(summary.sectors[0].industry,'強勢類別');assert.equal(summary.sectors[0].upRatio,1);
+ const missing=summary.sectors.find(s=>s.industry==='缺值類別')!;assert.equal(missing.medianChange,null);assert.equal(missing.upRatio,null);
+ assert.equal(choosePool(rows,'',1)[0].industry,'強勢類別');assert.equal(choosePool(rows,'',0).length,0);
+ assert.equal(summarizeSectors([]).coveredStocks,0);
 });

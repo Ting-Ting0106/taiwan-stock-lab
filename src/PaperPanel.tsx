@@ -18,11 +18,11 @@ export default function PaperPanel({account,onToggle,busy}:{account:PaperAccount
  <h3>假想買賣帳本</h3><div className="answer-table"><table><thead><tr><th>股票</th><th>假想進場／價格基準</th><th>股數／張數／成本</th><th>11時檢驗／結算</th><th>方向與損益</th></tr></thead><tbody>{[...account.positions].reverse().map(p=><tr key={p.id}><td>{p.code} {p.name}<br/><small>{p.mode==='trend_11'?'新版11時趨勢':'舊版13:20規則'}</small></td><td>{p.retrospectiveAt&&<><strong>回溯假想買進</strong><br/>補記 {at(p.retrospectiveAt)}<br/></>}{n(p.buyPrice)}<br/>{at(p.openedAt)}<br/><small>{p.entryBasis?({observed:'當時觀察最近成交',analysis_snapshot:'分析截面假想價，非發布後成交',previous_close:'已知收盤估價，非今日實際價'}[p.entryBasis]):'舊版撮合'}<br/>價格時間 {at(p.quoteAt)}</small></td><td>{p.quantity.toLocaleString('zh-TW',{maximumFractionDigits:6})} 股<br/>{(p.quantity/1000).toLocaleString('zh-TW',{maximumFractionDigits:6})} 張<br/>{n(p.cost)}</td><td>{p.closedAt?<>{n(p.sellPrice!)}<br/>{at(p.closedAt)}</>:<>待驗證<br/>{p.plannedExitDate??'日曆待補'} {p.mode==='trend_11'?'11:00':'13:20'}</>}</td><td>{p.evaluation&&<><span className={'badge query-status status-'+(p.evaluation.verdict==='correct'?'succeeded':p.evaluation.verdict==='wrong'?'failed':'market_unknown')}>{verdict[p.evaluation.verdict]}</span><br/>{p.evaluation.changePercent.toFixed(2)}%<br/>{p.evaluation.note}<br/></>}{p.pnl===undefined?'尚未實現損益':('成本後 '+n(p.pnl))}<br/>{p.issue??p.exitReason??'等待次交易日驗證'}</td></tr>)}</tbody></table></div>
  {!account.positions.length&&<p>尚無假想買進；舊查詢不回填。新版從下一次12:00正式排程開始。</p>}
 
- <h3>每日名單與11時改進紀錄</h3>{[...account.days].reverse().map(d=>{
+ <h3>每日名單與11時改進紀錄</h3><p className="muted">歷史紀錄持續保存在本機，依發布時間由新到舊排列，不會每天清除。點選標題展開詳細內容。時間皆為台北時間。</p>{!account.days.length&&<p>尚無每日名單紀錄。</p>}<ul className="paper-history">{[...account.days].sort((a,b)=>Date.parse(b.publishedAt)-Date.parse(a.publishedAt)).map(d=>{
  const label=(key:string)=>{const stock=d.snapshot.stocks.find(s=>s.market+':'+s.code===key);return stock?stock.code+' '+stock.name:key;};
  const positions=account.positions.filter(p=>p.queryId===d.queryId);
- return <article className="paper-day" key={d.id}>
- <header><h3>{d.date}</h3><span className="badge">{d.retrospective?'回溯假想買進':d.origin==='schedule'?'12時正式名單':'歷史查詢名單'}</span><span className="badge">{({recorded:'等待買進',zero:'零候選',missed:'錯過發布窗口',processed:positions.length?'已記錄買進':'未買進',data_missing:'資料待補'}[d.state])}</span></header>
+ return <li key={d.id}><details className="paper-day">
+ <summary><strong className="paper-history-title"><time dateTime={d.publishedAt}>{at(d.publishedAt)}</time><span>{d.selected.length?d.selected.map(label).join('、'):'零候選'}</span></strong><span className="badge">{d.retrospective?'回溯假想買進':d.origin==='schedule'?'12時正式名單':'歷史查詢名單'}</span><span className="badge">{({recorded:'等待買進',zero:'零候選',missed:'錯過發布窗口',processed:positions.length?'已記錄買進':'未買進',data_missing:'資料待補'}[d.state])}</span></summary>
  <div className="paper-times">
  <div><small>分析發布（台北時間）</small><strong>{at(d.publishedAt)}</strong></div>
  <div><small>預定檢驗與結算</small><strong>{d.plannedExitDate??'交易日待確認'}　{d.mode==='trend_11'?'11:00':'13:20（舊版）'}</strong></div>
@@ -30,8 +30,8 @@ export default function PaperPanel({account,onToggle,busy}:{account:PaperAccount
  {d.retrospective&&<div><small>實際補記時間</small><strong>{at(d.retrospective.recordedAt)}</strong><span>不納正式命中率</span></div>}
  </div>
  <p className="paper-stocks">{d.selected.map(key=><span className="badge" key={key}>{label(key)}</span>)}{!d.selected.length&&'零候選'}</p>
- {d.review&&<div><p>有效樣本 {d.review.verifiedCount}/{d.review.sampleCount}，猜對 {d.review.correctCount} 筆</p><ul>{d.review.findings.map(x=><li key={x}>{x}</li>)}</ul><strong>供下次分析參考的改進建議</strong><ul>{d.review.suggestions.map(x=><li key={x}>{x}</li>)}</ul></div>}
- <details><summary>分析理由與原始紀錄</summary><p>{d.strategy}</p>{d.decision&&<><p>{d.decision.summary}</p><ul>{d.decision.selected.map(s=><li key={s.market+s.code}>{label(s.market+':'+s.code)}：{s.reason}</li>)}</ul></>}<ul>{d.notes.map((x,i)=><li key={i}>{x}</li>)}</ul><small>快照 {d.snapshotHash}</small></details>
- </article>;})}
+ {d.review&&<div><p>有效樣本 {d.review.verifiedCount}/{d.review.sampleCount}，猜對 {d.review.correctCount} 筆</p><ul>{d.review.findings.map(x=><li key={x}>{x}</li>)}</ul>{d.review.audit&&<section><h4>資料核對與原因分析</h4><strong>保存一致性檢查（非官方數據獨立驗證）</strong><ul>{d.review.audit.checks.map((x,i)=><li key={i}>{x}</li>)}</ul><strong>保存數據可確認的現象</strong><ul>{d.review.audit.observations.map((x,i)=><li key={i}>{x}</li>)}</ul><strong>可能原因，尚待查證</strong><ul>{d.review.audit.hypotheses.map((x,i)=><li key={i}>{x}</li>)}</ul><strong>尚未完成的核對</strong><ul>{d.review.audit.limitations.map((x,i)=><li key={i}>{x}</li>)}</ul></section>}<strong>供下次分析參考的改進建議</strong><ul>{d.review.suggestions.map(x=><li key={x}>{x}</li>)}</ul></div>}
+ <div className="paper-day-record"><h4>分析理由與原始紀錄</h4><p>{d.strategy}</p>{d.decision&&<><p>{d.decision.summary}</p><ul>{d.decision.selected.map(s=><li key={s.market+s.code}>{label(s.market+':'+s.code)}：{s.reason}</li>)}</ul></>}<ul>{d.notes.map((x,i)=><li key={i}>{x}</li>)}</ul><small>快照 {d.snapshotHash}</small></div>
+ </details></li>;})}</ul>
  </section>;
 }

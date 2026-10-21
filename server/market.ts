@@ -64,10 +64,27 @@ export function parseSnapshot(payload: unknown, market: 'TWSE' | 'TPEX', compani
   const latest = stocks.reduce((d, s) => s.date > d ? s.date : d, '');
   return stocks.filter(s => s.date === latest);
 }
+
+export function summarizeSectors(stocks:MarketStock[]){
+ const date=stocks.reduce((last,s)=>s.date>last?s.date:last,'');
+ const latest=stocks.filter(s=>s.date===date),groups=new Map<string,MarketStock[]>();
+ for(const stock of latest){const rows=groups.get(stock.industry)??[];rows.push(stock);groups.set(stock.industry,rows);}
+ const sectors=[...groups].map(([industry,rows])=>{
+  const returns=rows.map(s=>s.changePercent).filter((v):v is number=>v!==null&&Number.isFinite(v)).sort((a,b)=>a-b),n=returns.length;
+  return {industry,count:rows.length,knownReturns:n,meanChange:n?mean(returns):null,medianChange:n?(returns[Math.floor((n-1)/2)]+returns[Math.floor(n/2)])/2:null,upRatio:n?returns.filter(v=>v>0).length/n:null,
+   representatives:[...rows].sort((a,b)=>(b.changePercent??-Infinity)-(a.changePercent??-Infinity)||a.code.localeCompare(b.code)).slice(0,3).map(s=>({market:s.market,code:s.code,name:s.name,changePercent:s.changePercent}))};
+ }).sort((a,b)=>Number(b.knownReturns>=3)-Number(a.knownReturns>=3)||(b.medianChange??-Infinity)-(a.medianChange??-Infinity)||(b.upRatio??-1)-(a.upRatio??-1)||a.industry.localeCompare(b.industry));
+ return {version:'sector-snapshot-0.1.0' as const,date,coveredStocks:latest.length,excludedOlderStocks:stocks.length-latest.length,sectors,limitations:['僅取得的同日普通股樣本，排除較舊日期；非官方類股指數，不保證涵蓋全市場。','按至少3檔有效漲跌樣本優先，再按漲跌中位數、上漲比例排序；小樣本類別不可視為廣泛強勢。','平均與中位數為等權個股日漲跌；上漲比例分母為有效漲跌家數，缺值不當作零。','只有最新完整交易日，未計算5日或20日類股報酬；亦不是今日盤中類股強弱。']};
+}
+
 export function choosePool(stocks: MarketStock[], prompt: string, limit = 12) {
+  if(limit<=0||!stocks.length)return [];
+  const overview=summarizeSectors(stocks);
+  stocks=stocks.filter(s=>s.date===overview.date);
+  const sectorRank=new Map(overview.sectors.map((s,i)=>[s.industry,i]));
   const explicit = stocks.filter(s => prompt.includes(s.name) || new RegExp('(^|[^0-9])' + s.code + '([^0-9]|$)').test(prompt.replace(/\b20\d{2}\b/g, '')));
   const rankedByStrength = stocks.filter(s => s.volume >= 1_000_000 && s.close * s.volume >= 50_000_000)
-    .sort((a, b) => (b.changePercent ?? -100) - (a.changePercent ?? -100) || b.close * b.volume - a.close * a.volume || a.code.localeCompare(b.code));
+    .sort((a, b) => (sectorRank.get(a.industry)??Infinity)-(sectorRank.get(b.industry)??Infinity) || (b.changePercent ?? -100) - (a.changePercent ?? -100) || b.close * b.volume - a.close * a.volume || a.code.localeCompare(b.code));
   const ranked = [...explicit, ...rankedByStrength.filter(s => !explicit.includes(s))];
   const pool: MarketStock[] = [], sectors = new Map<string, number>();
   for (const stock of ranked) {
@@ -173,7 +190,7 @@ export class MarketCollector {
     await this.load();
     const clock = taipeiNow(now), intraday = clock.weekday >= 1 && clock.weekday <= 5 && clock.minutes >= 540 && clock.minutes < 810;
     const report: MarketResearch = { version: 'market-evidence-0.2.0', collectedAt: now.toISOString(), mode: intraday ? 'intraday' : 'after_hours', quality: 'unavailable', screening: 'incomplete', universeCount: 0, poolCount: 0, technicalCount: 0, markets: [], stocks: [], sources: [], limitations: [
-      '初選只依最新官方收盤價量與產業分類，日線指標深入計算最多 12 檔；不是全市場技術掃描或買進推薦。',
+      '先依同日普通股產業漲跌摘要排序，再挑類別內個股；日線指標深入計算最多 12 檔；不是全市場技術掃描或買進推薦。',
       '歷史序列以官方各月份回傳資料為準，尚未透過交易日曆逐日核對缺日；不能當成完整回測資料集。',
       'MA 為日收盤簡單均線；KD(9,3,3) 初始 K/D=50；MACD EMA(12,26,9) 以首筆收盤初始化，柱狀=(DIF-訊號線)×2；至少 60 根，未還原除權息，結果可能與網站不同。',
       '上櫃月報成交張數×1000 為股，原表精度限千股，量比同用月報口徑；不與不同來源成交量拼接。',
@@ -209,7 +226,7 @@ export class MarketCollector {
         available.push(...rows); report.markets.push({ market, count: rows.length, date: rows[0].date });
       } catch (e) { report.markets.push({ market, count: 0 }); report.limitations.push(market + ' 來源不可用：' + (e instanceof Error ? e.message : '格式錯誤')); }
     }));
-    report.universeCount = available.length; report.stocks = choosePool(available, prompt, this.limit); report.poolCount = report.stocks.length;
+    report.universeCount = available.length; report.sectorOverview=summarizeSectors(available); report.stocks = choosePool(available, prompt, this.limit); report.poolCount = report.stocks.length;
     const cutoff = intraday || clock.minutes < 870 ? new Date(Date.parse(clock.date + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10) : clock.date;
     const months: string[] = [];
     const date = new Date(clock.date + 'T00:00:00Z');

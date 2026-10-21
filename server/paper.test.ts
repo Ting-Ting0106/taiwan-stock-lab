@@ -1,6 +1,6 @@
 import { TradingCalendar } from './calendar.ts';
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {retrospectivelyBuyDay,initialPaper,recordPaperDay,executePaperBuys,settlePaper,parsePaperCalendar,nextPaperSession} from './paper.ts';
+import {auditPaperDay,retrospectivelyBuyDay,initialPaper,recordPaperDay,executePaperBuys,settlePaper,parsePaperCalendar,nextPaperSession} from './paper.ts';
 import {extractTrendDecision} from './trend.ts';import type {Database,Query} from '../shared/model';import type {MarketResearch,MarketStock} from '../shared/market';
 const now=new Date('2026-10-16T04:02:00Z');
 function fixture(){
@@ -98,4 +98,14 @@ test('回溯補記缺價或資金不足整批拒絕，不留下部分扣款',()=
   const before=JSON.stringify(f.db.paper);assert.throws(()=>retrospectivelyBuyDay(f.db.paper!,day.id,now));
   assert.equal(JSON.stringify(f.db.paper),before);
  }
+});
+
+test('保存核對區分雜湊、時間異常與原因假說，不冒充指標獨立驗證',()=>{
+ const f=buy();let audit=auditPaperDay(f.day,f.db.paper!.positions);
+ assert.equal(audit.integrity,'matched');assert.ok(audit.limitations.some(x=>x.includes('無法')&&x.includes('獨立重算')));
+ f.day.snapshot.stocks[0].quote!.at='2099-01-01T12:00:00+08:00';
+ audit=auditPaperDay(f.day,f.db.paper!.positions);assert.equal(audit.integrity,'mismatch');assert.ok(audit.checks.some(x=>x.includes('成交時間異常')));
+ f.rows.forEach(s=>{s.quote!.at='2026-10-19T11:00:00+08:00';s.quote!.price=90;});
+ settlePaper(f.db.paper!,f.rows,new Date('2026-10-19T03:00:00Z'));assert.equal(f.day.review?.audit?.hypotheses.length,3);
+ assert.ok(f.day.review!.audit!.hypotheses.every(x=>x.includes('未確認原因')));
 });

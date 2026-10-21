@@ -97,6 +97,34 @@ function closePosition(account:PaperAccount,p:PaperPosition,price:number,now:Dat
  account.cash=money(account.cash+proceeds);
  Object.assign(p,{sellQuote:structuredClone(stock.quote),sellSource:stock.sources.at(-1),closedAt:now.toISOString(),sellPrice:price,sellFee,proceeds,pnl:money(proceeds-p.cost),exitReason:reason,issue:undefined});
 }
+
+/** Checks saved evidence; does not claim independent verification of the provider. */
+export function auditPaperDay(day:PaperDay,positions:PaperPosition[]){
+ const integrity=createHash('sha256').update(JSON.stringify(day.snapshot)).digest('hex')===day.snapshotHash?'matched':'mismatch';
+ const checks=[integrity==='matched'?'原始分析快照雜湊一致，保存內容未變更':'原始分析快照雜湊不一致，需追查保存內容；不代表行情已驗證'];
+ const observations:string[]=[],hypotheses:string[]=[];
+ for(const p of positions){
+  const stock=day.snapshot.stocks.find(s=>s.market===p.market&&s.code===p.code),name=p.code+' '+p.name;
+  if(!stock){checks.push(name+'：缺原始分析資料');continue;}
+  const i=stock.indicators,q=stock.quote;
+  const published=Date.parse(day.publishedAt),daily=Date.parse(stock.date+'T13:30:00+08:00');
+  checks.push(name+'：'+(Number.isFinite(daily)&&daily<=published?'日線日期未超過發布時間':'日線日期缺漏或超過發布時間，需追查'));
+  if(q)checks.push(name+'：'+(Number.isFinite(Date.parse(q.at))&&Date.parse(q.at)<=published?'原始盤中成交時間未超過發布時間':'原始盤中成交時間異常，需追查'));
+  if(i){
+   const entries=Object.entries(i).filter(([key])=>key!=='volumeRatio');
+   checks.push(name+'：'+(entries.every(([,v])=>Number.isFinite(v))&&i.k>=0&&i.k<=100&&i.d>=0&&i.d<=100?'已保存指標數值與KD範圍檢查通過':'指標缺漏或範圍異常，需追查'));
+   if(positive(i.ma20))observations.push(name+'：進場參考價相對原MA20乖離 '+((p.buyPrice/i.ma20-1)*100).toFixed(2)+'%（進場價/MA20−1；非當日更新MA20）');
+   if(positive(i.ma5))observations.push(name+'：進場參考價相對原MA5乖離 '+((p.buyPrice/i.ma5-1)*100).toFixed(2)+'%');
+   observations.push(name+'：原K '+i.k.toFixed(2)+'、D '+i.d.toFixed(2)+(i.volumeRatio!==null?'，完整日量比 '+i.volumeRatio.toFixed(2):'，完整日量比缺失'));
+  }else checks.push(name+'：缺保存指標，不能核對');
+  if(stock.changePercent!==null)observations.push(name+'：原最近完整交易日漲跌 '+stock.changePercent.toFixed(2)+'%');
+  if(q&&positive(q.high))observations.push(name+'：原快照成交相對盤中高點 '+((q.price/q.high-1)*100).toFixed(2)+'%（非完整日收盤位置）');
+  if(p.evaluation)observations.push(name+'：隔日觀察方向 '+({up:'上漲',down:'下跌',flat:'持平'}[p.evaluation.direction])+'，'+(p.retrospectiveAt?'回溯補記':p.evaluation.verdict==='unverified'?'估價或遲到樣本':'正式方向樣本')+'；方向與扣成本損益分開');
+  if(p.evaluation?.direction==='down')hypotheses.push(name+'：需比較動能延續失敗、追高回落、市場／族群轉弱及新消息；目前僅觀察到下跌，未確認原因');
+ }
+ return {version:'snapshot-audit-0.1.0' as const,integrity:integrity as 'matched'|'mismatch',checks,observations,hypotheses,limitations:['快照雜湊與欄位檢查只驗證保存一致性，不證明官方原始資料正確。','未保存完整原始逐日序列，無法在本次檢驗獨立重算全部MA、KD、MACD；需原始日線及計算版本才能核對。','未於11時自動核對市場指數、族群表現、公司公告與新聞，不能斷言下跌因果；下一次AI須補查來源與事件時間。','參考成交可能早於11:00，應同時查看實際報價時間；不是精確11:00成交或真實下單。']};
+}
+
 export function buildPaperReviews(account:PaperAccount,now:Date){
  const clock=taipeiNow(now);
  for(const day of account.days.filter(d=>d.mode==='trend_11'&&d.plannedExitDate&&(d.plannedExitDate<clock.date||(d.plannedExitDate===clock.date&&clock.minutes>=660)))){
@@ -111,8 +139,10 @@ export function buildPaperReviews(account:PaperAccount,now:Date){
   const suggestions=['先累積至少20個可驗證樣本，再比較規則；單日輸贏不自動調參。','方向與扣成本後盈虧分開；新策略需在未參與調整的日期驗證。'];
   if(hot)suggestions.push('可在新版本比較高KD候選與其他候選，保留舊版，不直接套改。');
   if(positions.some(p=>p.pnl!==undefined&&p.pnl<0&&p.evaluation?.direction==='up'))suggestions.push('有猜對方向但成本後虧損；比較預期幅度與成本，不只比較漲跌。');
-  if(verified.length<positions.length)suggestions.push('先改善11時資料可用性；資料缺失與遲到不能算選股錯誤。');
-  day.review={version:'trend-review-0.1.0',evaluatedAt:now.toISOString(),status:positions.every(p=>p.closedAt)?'completed':'partial',sampleCount:positions.length,verifiedCount:verified.length,correctCount:correct.length,findings,suggestions};
+  if(positions.some(p=>p.retrospectiveAt))suggestions.push('含使用者回溯補記樣本：可觀察價格方向與模擬盈虧，但不納正式命中率；不是11時取價失敗。');
+  if(positions.some(p=>p.evaluation&&!p.evaluation.onTime||!p.evaluation))suggestions.push('另有遲到或未取得檢驗資料的樣本，需檢查11時資料可用性；不能直接算選股錯誤。');
+  if(positions.some(p=>!p.retrospectiveAt&&p.entryBasis!=='observed'))suggestions.push('含分析快照或前日收盤估價樣本：進場基準與當時觀察價不同，不納正式命中率。');
+  day.review={audit:auditPaperDay(day,positions),version:'trend-review-0.1.0',evaluatedAt:now.toISOString(),status:positions.every(p=>p.closedAt)?'completed':'partial',sampleCount:positions.length,verifiedCount:verified.length,correctCount:correct.length,findings,suggestions};
  }
 }
 export function settlePaper(account:PaperAccount,stocks:MarketStock[],now=new Date()){
